@@ -1,0 +1,16 @@
+version: "3"
+services:
+  php:
+    image: "php:cli-alpine"
+    volumes:
+      - .:/var/www/html
+    ports:
+      - "8081:8081"
+#    restart: "always"
+    working_dir: "/var/www/html"
+    command:
+      - "php"
+      - "-S"
+      - "0:8081"
+      - "public/index.php"
+
