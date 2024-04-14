@@ -9,7 +9,10 @@ class PasswordGeneratorTest extends TestCase
 {
     public function test_get_password()
     {
-        $password = new PasswordGenerator;
-        $this->assertNotEmpty($password->getPassword());
+        $passLength = mt_rand(1, 16);
+
+        $password = (new PasswordGenerator)->getPassword($passLength);
+        $this->assertNotEmpty($password);
+        $this->assertEquals($passLength, strlen($password));
     }
 }

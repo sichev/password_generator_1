@@ -5,8 +5,13 @@ namespace App\Models;
 class PasswordGenerator
 {
 
-    public function getPassword(): string
+
+    public function getPassword(int $length = 8): string
     {
-        return "1";
+        $pass = "";
+        for ($i = 0; $i < $length; $i++) {
+            $pass .= mt_rand(0, 9);
+        }
+        return $pass;
     }
 }
