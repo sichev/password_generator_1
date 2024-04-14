@@ -185,4 +185,10 @@ return [
         // 'Example' => App\Facades\Example::class,
     ])->toArray(),
 
+    'passwordSets' => [
+        'numbers' => env('SETS_NUMBERS', []),
+        'upperCase' => env('SETS_UPPERCASE', []),
+        'lowerCase' => env('SETS_LOWERCASE', []),
+    ],
+
 ];
