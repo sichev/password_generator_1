@@ -30,9 +30,9 @@ class PasswordGeneratorTest extends TestCase
         $generator = new PasswordGenerator();
         $this->assertEquals(PHPUnitUtil::getParam($generator, 'charactersSet'), '');
 
-        $generator->useNumbers();
+        $generator->useNumerics();
         $this->assertEquals(PHPUnitUtil::getParam($generator, 'charactersSet'), config('app.passwordSets.numbers'));
-        $generator->useNumbers(false);
+        $generator->useNumerics(false);
         $this->assertEquals(PHPUnitUtil::getParam($generator, 'charactersSet'), '');
 
         $generator->useLowerCase();
