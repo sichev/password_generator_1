@@ -3,12 +3,16 @@
 namespace Tests\Unit;
 
 use App\Models\PasswordGenerator;
+use Illuminate\Foundation\Testing\DatabaseMigrations;
+use Tests\PHPUnitUtil;
 use Tests\TestCase;
 
 class PasswordGeneratorTest extends TestCase
 {
+    use DatabaseMigrations;
     protected function setUp(): void
     {
+        parent::setUp();
         $this->createApplication();
     }
 
@@ -105,5 +109,39 @@ class PasswordGeneratorTest extends TestCase
             $this->assertNotContains($password[$i], $usedCharacters);
             $usedCharacters[] = $password[$i];
         }
+    }
+
+    public function test_that_passwords_are_non_repeat()
+    {
+        PasswordGenerator::truncate();
+
+        $password = 'password';
+        $password2 = 'password2';
+
+        $generator = new PasswordGenerator();
+        $this->assertFalse($generator->isPasswordAlreadyUsed($password));
+        PHPUnitUtil::callMethod($generator, 'storePassword', [$password]);
+        $this->assertTrue($generator->isPasswordAlreadyUsed($password));
+
+        $generator2 = new PasswordGenerator();
+        $this->assertFalse($generator2->isPasswordAlreadyUsed($password2));
+        PHPUnitUtil::callMethod($generator2, 'storePassword', [$password2]);
+        $this->assertTrue($generator2->isPasswordAlreadyUsed($password2));
+
+        for($i = 1; $i <= 10; $i++)
+            (new PasswordGenerator)->setLength(1)->useNumerics()->getPassword();
+
+        $this->assertDatabaseCount(PasswordGenerator::class, 12);
+    }
+
+    public function test_unique_exception_runtime_limit()
+    {
+        PasswordGenerator::truncate();
+        for($i = 1; $i <= 10; $i++)
+            (new PasswordGenerator)->setLength(1)->useNumerics()->getPassword();
+        $this->assertDatabaseCount(PasswordGenerator::class, 10);
+
+        $this->expectExceptionMessage("Cannot generate a unique password");
+        (new PasswordGenerator)->setLength(1)->useNumerics()->getPassword();
     }
 }

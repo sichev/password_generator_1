@@ -4,8 +4,10 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 
-class PasswordGenerator
+class PasswordGenerator extends Model
 {
+    protected $table = 'password_generator';
+
     private int $length = 8;
     private string $charactersSet = '';
 
@@ -44,15 +46,47 @@ class PasswordGenerator
             throw new \Exception("Password set is too short");
         }
 
-        $availableSet = $this->charactersSet;
+        $passIsPassed = false;
+        $startTime = microtime(true);
+        while (!$passIsPassed) {
+            $availableSet = $this->charactersSet;
 
-        $pass = "";
-        for ($i = 0; $i < $this->length; $i++) {
-            $usedChar = $this->getRandomCharFromString($availableSet);
-            $pass .= $usedChar;
-            $availableSet = $this->removeCharFromSet($usedChar, $availableSet);
+            $pass = "";
+            for ($i = 0; $i < $this->length; $i++) {
+                $usedChar = $this->getRandomCharFromString($availableSet);
+                $pass .= $usedChar;
+                $availableSet = $this->removeCharFromSet($usedChar, $availableSet);
+            }
+
+            if (!$this->isPasswordAlreadyUsed($pass)) {
+                $this->storePassword($pass);
+                $passIsPassed = true;
+            }
+
+            $time = microtime(true) - $startTime;
+            if ($time > 25) {
+                throw new \Exception("Cannot generate a unique password");
+            }
         }
         return $pass;
+    }
+
+    public function isPasswordAlreadyUsed(string $password): bool
+    {
+        foreach (self::all(['pass_hash']) as $hashedPassword) {
+            if (password_verify($password, $hashedPassword->pass_hash)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function storePassword(string $password): self
+    {
+        $this->pass_hash = password_hash($password, PASSWORD_DEFAULT);
+        $this->save();
+        return $this;
     }
 
     private function processSet(string $set, bool $isNeedToAdd)
