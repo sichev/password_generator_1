@@ -35,11 +35,6 @@ class PasswordGenerator extends Model
         return $this;
     }
 
-    public function getSet(): string
-    {
-        return $this->charactersSet;
-    }
-
     public function getPassword(): string
     {
         if (strlen($this->charactersSet) < $this->length) {

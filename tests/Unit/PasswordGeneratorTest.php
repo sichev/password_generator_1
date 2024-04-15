@@ -28,22 +28,22 @@ class PasswordGeneratorTest extends TestCase
     public function test_sets_for_correct_set_and_unset()
     {
         $generator = new PasswordGenerator();
-        $this->assertEquals($generator->getSet(), '');
+        $this->assertEquals(PHPUnitUtil::getParam($generator, 'charactersSet'), '');
 
-        $generator->useNumerics();
-        $this->assertEquals($generator->getSet(), config('app.passwordSets.numbers'));
-        $generator->useNumerics(false);
-        $this->assertEquals($generator->getSet(), '');
+        $generator->useNumbers();
+        $this->assertEquals(PHPUnitUtil::getParam($generator, 'charactersSet'), config('app.passwordSets.numbers'));
+        $generator->useNumbers(false);
+        $this->assertEquals(PHPUnitUtil::getParam($generator, 'charactersSet'), '');
 
         $generator->useLowerCase();
-        $this->assertEquals($generator->getSet(), config('app.passwordSets.lowerCase'));
+        $this->assertEquals(PHPUnitUtil::getParam($generator, 'charactersSet'), config('app.passwordSets.lowerCase'));
         $generator->useLowerCase(false);
-        $this->assertEquals($generator->getSet(), '');
+        $this->assertEquals(PHPUnitUtil::getParam($generator, 'charactersSet'), '');
 
         $generator->useUpperCase();
-        $this->assertEquals($generator->getSet(), config('app.passwordSets.upperCase'));
+        $this->assertEquals(PHPUnitUtil::getParam($generator, 'charactersSet'), config('app.passwordSets.upperCase'));
         $generator->useUpperCase(false);
-        $this->assertEquals($generator->getSet(), '');
+        $this->assertEquals(PHPUnitUtil::getParam($generator, 'charactersSet'), '');
     }
 
     public function test_get_numeric_password()
