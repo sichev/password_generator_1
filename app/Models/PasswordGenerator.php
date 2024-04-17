@@ -2,24 +2,29 @@
 
 namespace App\Models;
 
+use App\Interfaces\PasswordGeneratorInterface;
 use Illuminate\Database\Eloquent\Model;
 
-class PasswordGenerator extends Model
+class PasswordGenerator extends Model implements PasswordGeneratorInterface
 {
     protected $table = 'password_generator';
 
-    const SET_RANDOM = 0;
-    const SET_NUMERICS = 1;
-    const SET_LOWERCASE = 2;
-    const SET_UPPERCASE = 3;
+    const int SET_RANDOM = 0;
+    const int SET_NUMERICS = 1;
+    const int SET_LOWERCASE = 2;
+    const int SET_UPPERCASE = 3;
+    const array SETS = [
+        self::SET_NUMERICS => '1234567890',
+        self::SET_LOWERCASE => 'qwertyuiopasdfghjklzxcvbnm',
+        self::SET_UPPERCASE => 'QWERTYUIOPASDFGHJKLZXCVBNM',
+    ];
 
     private int $length = 0;
-    /** @var array<int>} */
+    /** @var array<int> */
     private array $usedSets = [];
     /** @var array<int,string>  */
     private array $availableCharacters = [];
-    private string $charactersSet = '';
-    private $passwordMask = '';
+    private string $passwordMask = '';
 
     public function setLength(int $length): self
     {
@@ -27,34 +32,41 @@ class PasswordGenerator extends Model
         return $this;
     }
 
-    public function useUpperCase(bool $upperCase = true): self {
-        $set = config('app.passwordSets.upperCase');
-        $this->processSet($set, $upperCase, self::SET_UPPERCASE);
+    public function useUpperCase(bool $isActive = true): self {
+        $this->processSet($isActive, self::SET_UPPERCASE);
         return $this;
     }
 
-    public function useLowerCase(bool $lowerCase = true): self {
-        $set = config('app.passwordSets.lowerCase');
-        $this->processSet($set, $lowerCase, self::SET_LOWERCASE);
+    public function useLowerCase(bool $isActive = true): self {
+        $this->processSet($isActive, self::SET_LOWERCASE);
         return $this;
     }
 
-    public function useNumerics(bool $numerics = true): self {
-        $set = config('app.passwordSets.numbers');
-        $this->processSet($set, $numerics, self::SET_NUMERICS);
+    public function useNumbers(bool $isActive = true): self {
+        $this->processSet($isActive, self::SET_NUMERICS);
         return $this;
     }
 
+    /**
+     * @throws \Exception
+     */
     public function getPassword(): string
     {
         $this->verifySetSettings();
         $passIsPassed = false;
         $startTime = microtime(true);
         while (!$passIsPassed) {
+            $time = microtime(true) - $startTime;
+            if ($time > 25) {
+                throw new \Exception("Cannot generate a unique password");
+            }
+
             $this->updatePasswordMask();
+            $this->resetAvailableCharacters();
             $pass = "";
+
             for ($i = 0; $i < $this->length; $i++) {
-                $setType = (int) $this->passwordMask[$i];
+                $setType = (int)$this->passwordMask[$i];
                 $usedChar = $this->getNextCharacter($setType);
                 $pass .= $usedChar;
             }
@@ -63,20 +75,15 @@ class PasswordGenerator extends Model
                 $this->storePassword($pass);
                 $passIsPassed = true;
             }
-
-            $time = microtime(true) - $startTime;
-            if ($time > 25) {
-                throw new \Exception("Cannot generate a unique password");
-            }
         }
 
         return $pass;
     }
 
-    public function isPasswordAlreadyUsed(string $password): bool
+    private function isPasswordAlreadyUsed(string $password): bool
     {
         foreach (self::all(['pass_hash']) as $hashedPassword) {
-            if (password_verify($password, $hashedPassword->pass_hash)) {
+            if (password_verify($password, $hashedPassword->pass_hash ?? null)) {
                 return true;
             }
         }
@@ -91,11 +98,11 @@ class PasswordGenerator extends Model
         return $this;
     }
 
-    private function processSet(string $setContent, bool $isNeedToAdd, int $setType): self
+    private function processSet(bool $isNeedToAdd, int $setType): self
     {
-        $this->removeSet($setContent, $setType);
+        $this->removeSet($setType);
         if ($isNeedToAdd)
-            $this->addSet($setContent, $setType);
+            $this->addSet($setType);
         return $this;
     }
 
@@ -105,16 +112,13 @@ class PasswordGenerator extends Model
         if (empty($this->availableCharacters[$setType]))
             $setType = self::SET_RANDOM;
 
-        if ($setType === self::SET_RANDOM) {
-            $pool = $this->usedSets;
-            while ($setType === self::SET_RANDOM) {
-                $newSetTypeKey = array_rand($pool);
-                if (empty($this->availableCharacters[$pool[$newSetTypeKey]])) {
-                    unset($pool[$newSetTypeKey]);
-                    continue;
-                }
-                $setType = $pool[$newSetTypeKey];
+        while ($setType === self::SET_RANDOM) {
+            $newSetTypeKey = array_rand($this->usedSets);
+            if (empty($this->availableCharacters[$this->usedSets[$newSetTypeKey]])) {
+                unset($this->usedSets[$newSetTypeKey]);
+                continue;
             }
+            $setType = $this->usedSets[$newSetTypeKey];
         }
 
         $charactersSet = $this->availableCharacters[$setType];
@@ -133,30 +137,27 @@ class PasswordGenerator extends Model
         return implode('', $set);
     }
 
-    private function removeSet(string $setContent, int $setType): self
+    private function removeSet(int $setType): self
     {
-        // Old approach
-//        for ($i = 0; $i <= strlen($setContent)-1; $i++) {
-//            $this->charactersSet = $this->removeCharFromSet($setContent[$i], $this->charactersSet);
-//        }
-
-        // New approach
         $this->usedSets = array_diff($this->usedSets, [$setType]);
         unset($this->availableCharacters[$setType]);
 
         return $this;
     }
 
-    private function addSet(string $setContent, int $setType): self
+    private function addSet(int $setType): self
     {
-        // Old approach
-//        $this->charactersSet .= $setContent;
-
-        // New approach
         $this->usedSets[] = $setType;
-        $this->availableCharacters[$setType] = $setContent;
+        $this->resetAvailableCharacters();
 
         return $this;
+    }
+
+    private function resetAvailableCharacters(): void
+    {
+        foreach ($this->usedSets as $set) {
+            $this->availableCharacters[$set] = self::SETS[$set];
+        }
     }
 
     private function getRandomCharFromString(string $string): string
