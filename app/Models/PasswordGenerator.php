@@ -2,6 +2,11 @@
 
 namespace App\Models;
 
+use App\Exceptions\PasswordGenerator\LengthIsTooShortForSetsAmountException;
+use App\Exceptions\PasswordGenerator\CharactersAmountIsTooSmallForPasswordLengthException;
+use App\Exceptions\PasswordGenerator\TimeoutException;
+use App\Exceptions\PasswordGenerator\UnexpectedEndOfAvailableSetsException;
+use App\Exceptions\PasswordGenerator\UnexpectedPasswordGenerationFailureException;
 use App\Interfaces\PasswordGeneratorInterface;
 use Illuminate\Database\Eloquent\Model;
 
@@ -25,6 +30,7 @@ class PasswordGenerator extends Model implements PasswordGeneratorInterface
     /** @var array<int,string>  */
     private array $availableCharacters = [];
     private string $passwordMask = '';
+    private string $resultPassword = '';
 
     public function setLength(int $length): self
     {
@@ -48,36 +54,43 @@ class PasswordGenerator extends Model implements PasswordGeneratorInterface
     }
 
     /**
-     * @throws \Exception
+     * Get a password string
+     *
+     * @return string
+     *
+     * @throws CharactersAmountIsTooSmallForPasswordLengthException
+     * @throws LengthIsTooShortForSetsAmountException
+     * @throws TimeoutException
+     * @throws UnexpectedPasswordGenerationFailureException
+     * @throws UnexpectedEndOfAvailableSetsException
      */
     public function getPassword(): string
     {
         $this->verifySetSettings();
-        $passIsPassed = false;
         $startTime = microtime(true);
-        while (!$passIsPassed) {
+
+        while (true) {
             $time = microtime(true) - $startTime;
             if ($time > 25) {
-                throw new \Exception("Cannot generate a unique password");
+                throw new TimeoutException();
             }
 
             $this->updatePasswordMask();
             $this->resetAvailableCharacters();
-            $pass = "";
 
             for ($i = 0; $i < $this->length; $i++) {
-                $setType = (int)$this->passwordMask[$i];
+                $setType = (int) $this->passwordMask[$i];
                 $usedChar = $this->getNextCharacter($setType);
-                $pass .= $usedChar;
+                $this->resultPassword .= $usedChar;
             }
 
-            if (!$this->isPasswordAlreadyUsed($pass)) {
-                $this->storePassword($pass);
-                $passIsPassed = true;
+            if (!$this->isPasswordAlreadyUsed($this->resultPassword)) {
+                $this->storePassword($this->resultPassword);
+                return $this->resultPassword;
             }
         }
 
-        return $pass;
+        throw new UnexpectedPasswordGenerationFailureException();
     }
 
     private function isPasswordAlreadyUsed(string $password): bool
@@ -91,28 +104,34 @@ class PasswordGenerator extends Model implements PasswordGeneratorInterface
         return false;
     }
 
-    private function storePassword(string $password): self
+    private function storePassword(string $password): void
     {
         $this->pass_hash = password_hash($password, PASSWORD_DEFAULT);
         $this->save();
-        return $this;
     }
 
-    private function processSet(bool $isNeedToAdd, int $setType): self
+    private function processSet(bool $isNeedToAdd, int $setType): void
     {
         $this->removeSet($setType);
         if ($isNeedToAdd)
             $this->addSet($setType);
-        return $this;
     }
 
-    private function getNextCharacter(int $initialSetType): string
+    /**
+     * @throws UnexpectedEndOfAvailableSetsException
+     */
+    private function getNextCharacter(int $setType): string
     {
-        $setType = $initialSetType;
         if (empty($this->availableCharacters[$setType]))
             $setType = self::SET_RANDOM;
 
         while ($setType === self::SET_RANDOM) {
+            if (empty($this->usedSets)) {
+                if (!isset($newSetTypeKey))
+                    $newSetTypeKey = null;
+                throw new UnexpectedEndOfAvailableSetsException($this->availableCharacters, $this->resultPassword, $this->usedSets, $newSetTypeKey);
+            }
+
             $newSetTypeKey = array_rand($this->usedSets);
             if (empty($this->availableCharacters[$this->usedSets[$newSetTypeKey]])) {
                 unset($this->usedSets[$newSetTypeKey]);
@@ -137,20 +156,16 @@ class PasswordGenerator extends Model implements PasswordGeneratorInterface
         return implode('', $set);
     }
 
-    private function removeSet(int $setType): self
+    private function removeSet(int $setType): void
     {
         $this->usedSets = array_diff($this->usedSets, [$setType]);
         unset($this->availableCharacters[$setType]);
-
-        return $this;
     }
 
-    private function addSet(int $setType): self
+    private function addSet(int $setType): void
     {
         $this->usedSets[] = $setType;
         $this->resetAvailableCharacters();
-
-        return $this;
     }
 
     private function resetAvailableCharacters(): void
@@ -158,11 +173,13 @@ class PasswordGenerator extends Model implements PasswordGeneratorInterface
         foreach ($this->usedSets as $set) {
             $this->availableCharacters[$set] = self::SETS[$set];
         }
+        $this->resultPassword = '';
     }
+
 
     private function getRandomCharFromString(string $string): string
     {
-        return $string[mt_rand(0, strlen($string) - 1)];
+        return $string[$this->getRandomCharacterIndexFromString($string)];
     }
 
     private function updatePasswordMask(): void
@@ -178,31 +195,35 @@ class PasswordGenerator extends Model implements PasswordGeneratorInterface
 
     private function getEmptyMask(int $length): string
     {
-        $mask = '';
-
-        for ($i = 0; $i < $length; $i++) {
-            $mask .= self::SET_RANDOM;
-        }
-
-        return $mask;
+        return str_repeat(self::SET_RANDOM, $length);
     }
 
     private function getRandomPasswordMaskIndex(string $mask): int
     {
-        $index = mt_rand(0, strlen($mask) - 1);
-        return $this->getNextAvailableIndex($mask, $index);
+        $index = $this->getRandomCharacterIndexFromString($mask);
+        return $this->getNextAvailableRandomIndex($mask, $index);
     }
 
-    private function getNextAvailableIndex(string $mask, int $currentIndex): int
+    private function getRandomCharacterIndexFromString(string $string): int
     {
-        if ($this->isAvailableMaskIndex($mask, $currentIndex))
+        return mt_rand(0, strlen($string) - 1);
+    }
+
+    private function getNextAvailableRandomIndex(string $mask, int $currentIndex): int
+    {
+        if ($this->isRandomIndexInMask($mask, $currentIndex))
             return $currentIndex;
 
-        $newIndex = $this->isLastInList($mask, $currentIndex) ? 0 : $currentIndex + 1;
-        while (!$this->isAvailableMaskIndex($mask, $newIndex))
-            $this->getNextAvailableIndex($mask, $newIndex);
+        $newIndex = $this->getNextIndexInMask($mask, $currentIndex);
+        while (!$this->isRandomIndexInMask($mask, $newIndex))
+            $this->getNextAvailableRandomIndex($mask, $newIndex);
 
         return $newIndex;
+    }
+
+    private function getNextIndexInMask(string $mask, int $currentIndex): int
+    {
+        return $this->isLastInList($mask, $currentIndex) ? 0 : $currentIndex + 1;
     }
 
     private function isLastInList(string $mask, int $currentIndex): bool
@@ -210,17 +231,25 @@ class PasswordGenerator extends Model implements PasswordGeneratorInterface
         return $currentIndex === strlen($mask) -1;
     }
 
-    private function isAvailableMaskIndex(string $mask, int $index):bool
+    private function isRandomIndexInMask(string $mask, int $index): bool
     {
         return $mask[$index] === (string) self::SET_RANDOM;
     }
 
+    /**
+     * @throws CharactersAmountIsTooSmallForPasswordLengthException
+     * @throws LengthIsTooShortForSetsAmountException
+     */
     private function verifySetSettings(): void
     {
-        if (strlen(implode($this->availableCharacters)) < $this->length)
-            throw new \Exception("Password set is too short");
+        $length = $this->length;
+        $charsAmount = strlen(implode('', $this->availableCharacters));
+        $setsAmount = count($this->usedSets);
 
-        if (count($this->usedSets) > $this->length)
-            throw new \Exception("Password length exceed amount of sets");
+        if ($charsAmount < $length)
+            throw new CharactersAmountIsTooSmallForPasswordLengthException($charsAmount, $length);
+
+        if ($setsAmount > $length)
+            throw new LengthIsTooShortForSetsAmountException($setsAmount, $length);
     }
 }

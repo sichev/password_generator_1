@@ -2,6 +2,8 @@
 
 namespace Tests\Unit;
 
+use App\Exceptions\PasswordGenerator\CharactersAmountIsTooSmallForPasswordLengthException;
+use App\Exceptions\PasswordGenerator\TimeoutException;
 use App\Models\PasswordGenerator;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
 use Tests\PHPUnitUtil;
@@ -87,7 +89,7 @@ class PasswordGeneratorTest extends TestCase
 
     public function test_password_excess_length()
     {
-        $this->expectExceptionMessage("Password set is too short");
+        $this->expectException(CharactersAmountIsTooSmallForPasswordLengthException::class);
         $password = (new PasswordGenerator)
             ->setLength(11)
             ->useNumbers()
@@ -141,12 +143,11 @@ class PasswordGeneratorTest extends TestCase
             (new PasswordGenerator)->setLength(1)->useNumbers()->getPassword();
         $this->assertDatabaseCount(PasswordGenerator::class, 10);
 
-        $this->expectExceptionMessage("Cannot generate a unique password");
+        $this->expectException(TimeoutException::class);
         (new PasswordGenerator)->setLength(1)->useNumbers()->getPassword();
-//        $this->assertDatabaseCount(PasswordGenerator::class, 11);
     }
 
-    public function that_password_contains_selected_characters()
+    public function test_password_contains_selected_characters()
     {
         $password = (new PasswordGenerator)->setLength(3)->useUpperCase()->getPassword();
         $this->assertMatchesRegularExpression('/[A-Z]/', $password);
@@ -154,34 +155,33 @@ class PasswordGeneratorTest extends TestCase
         $this->assertMatchesRegularExpression('/[^0-9]/', $password);
 
         $password = (new PasswordGenerator)->setLength(3)->useLowerCase()->getPassword();
+        $this->assertMatchesRegularExpression('/[^A-Z]/', $password);
         $this->assertMatchesRegularExpression('/[a-z]/', $password);
+        $this->assertMatchesRegularExpression('/[^0-9]/', $password);
 
         $password = (new PasswordGenerator)->setLength(3)->useNumbers()->getPassword();
+        $this->assertMatchesRegularExpression('/[^A-Z]/', $password);
+        $this->assertMatchesRegularExpression('/[^a-z]/', $password);
         $this->assertMatchesRegularExpression('/[0-9]/', $password);
 
         $password = (new PasswordGenerator)->setLength(3)->useNumbers()->useUpperCase()->getPassword();
-        $this->assertMatchesRegularExpression('/[0-9]/', $password);
         $this->assertMatchesRegularExpression('/[A-Z]/', $password);
+        $this->assertMatchesRegularExpression('/[^a-z]/', $password);
+        $this->assertMatchesRegularExpression('/[0-9]/', $password);
 
         $password = (new PasswordGenerator)->setLength(3)->useNumbers()->useLowerCase()->getPassword();
+        $this->assertMatchesRegularExpression('/[^A-Z]/', $password);
         $this->assertMatchesRegularExpression('/[a-z]/', $password);
         $this->assertMatchesRegularExpression('/[0-9]/', $password);
 
         $password = (new PasswordGenerator)->setLength(3)->useUpperCase()->useLowerCase()->getPassword();
         $this->assertMatchesRegularExpression('/[A-Z]/', $password);
         $this->assertMatchesRegularExpression('/[a-z]/', $password);
+        $this->assertMatchesRegularExpression('/[^0-9]/', $password);
 
         $password = (new PasswordGenerator)->setLength(3)->useUpperCase()->useLowerCase()->useNumbers()->getPassword();
         $this->assertMatchesRegularExpression('/[A-Z]/', $password);
         $this->assertMatchesRegularExpression('/[a-z]/', $password);
         $this->assertMatchesRegularExpression('/[0-9]/', $password);
-
-    }
-
-    public function _test_dummy()
-    {
-        $pool = [0 => 1, 2 => 3];
-        $newSetTypeKey = array_rand($pool);
-        $this->assertEquals(0, $newSetTypeKey);
     }
 }
