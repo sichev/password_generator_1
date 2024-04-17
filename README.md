@@ -7,6 +7,6 @@ User can setup generator:
 Tool Requirements:
 - ✅ all symbols in the password must be used only once
 - ✅ password must be unique
-- ❌ password must contain at least one character from all user selected sets
+- ✅ password must contain at least one character from all user selected sets
 - ❌ UI doesn't matter, but must be an interactable HTML
 
