@@ -126,14 +126,8 @@ class PasswordGenerator extends Model implements PasswordGeneratorInterface
             $setType = self::SET_RANDOM;
 
         while ($setType === self::SET_RANDOM) {
-            if (empty($this->usedSets)) {
-                if (!isset($newSetTypeKey))
-                    $newSetTypeKey = null;
-                throw new UnexpectedEndOfAvailableSetsException($this->availableCharacters, $this->resultPassword, $this->usedSets, $newSetTypeKey);
-            }
-
             $newSetTypeKey = array_rand($this->usedSets);
-            if (empty($this->availableCharacters[$this->usedSets[$newSetTypeKey]])) {
+            if (!strlen($this->availableCharacters[$this->usedSets[$newSetTypeKey]])) {
                 unset($this->usedSets[$newSetTypeKey]);
                 continue;
             }
