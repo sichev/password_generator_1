@@ -8,10 +8,13 @@ use App\Exceptions\PasswordGenerator\TimeoutException;
 use App\Exceptions\PasswordGenerator\UnexpectedEndOfAvailableSetsException;
 use App\Exceptions\PasswordGenerator\UnexpectedPasswordGenerationFailureException;
 use App\Interfaces\PasswordGeneratorInterface;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
 class PasswordGenerator extends Model implements PasswordGeneratorInterface
 {
+    use HasFactory;
+
     protected $table = 'password_generator';
 
     const int SET_RANDOM = 0;
